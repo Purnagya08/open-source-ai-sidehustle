@@ -1,9 +1,11 @@
 {
   "name": "open-source-ai-sidehustle",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI-powered product-photo listing generator using Gemma 3 via Ollama",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -13,6 +15,7 @@
   "dependencies": {
     "dotenv": "^18.0.7",
     "express": "^5.3.0",
-    "mongoose": "^9.11.2"
+    "mongoose": "^9.11.2",
+    "multer": "^1.4.5-lts.2"
   }
 }
