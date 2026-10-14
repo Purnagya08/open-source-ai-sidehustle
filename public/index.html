@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+  <meta name="theme-color" content="#4f46e5" />
+  <title>SideHustle — AI Listing Generator</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>SideHustle</h1>
+    <nav class="tabs">
+      <button class="tab-btn active" data-view="generate">Generate</button>
+      <button class="tab-btn" data-view="history">History</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ============ GENERATE VIEW ============ -->
+    <section id="view-generate" class="view active">
+      <form id="generate-form">
+        <div class="field">
+          <label>Product Photos (1–4)</label>
+          <div class="upload-row">
+            <label class="upload-btn" for="camera-input">
+              📷 Take Photo
+              <input id="camera-input" type="file" accept="image/*" capture="environment" hidden />
+            </label>
+            <label class="upload-btn secondary" for="gallery-input">
+              🖼️ From Gallery
+              <input id="gallery-input" type="file" accept="image/*" multiple hidden />
+            </label>
+          </div>
+          <div id="previews" class="previews"></div>
+          <p class="hint" id="photo-count">0 / 4 photos selected</p>
+        </div>
+
+        <div class="field">
+          <label for="language">Language</label>
+          <select id="language" required>
+            <option value="English">English</option>
+            <option value="Hindi">Hindi</option>
+            <option value="Bengali">Bengali (experimental)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="category">Category</label>
+          <select id="category" required>
+            <option value="Clothing">Clothing</option>
+            <option value="Jewellery">Jewellery</option>
+            <option value="Home Decor">Home Decor</option>
+            <option value="Bags">Bags</option>
+            <option value="Food">Food</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="platform">Platform (optional)</label>
+          <select id="platform">
+            <option value="">— None —</option>
+            <option value="Instagram">Instagram</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Meesho">Meesho</option>
+            <option value="Etsy">Etsy</option>
+            <option value="eBay">eBay</option>
+          </select>
+        </div>
+
+        <button type="submit" id="generate-btn" class="primary-btn">
+          Generate Listing
+        </button>
+      </form>
+
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>Gemma is writing your listing.<br />The first run can take up to a minute.</p>
+      </div>
+
+      <div id="error" class="error-box hidden"></div>
+
+      <div id="result" class="result hidden"></div>
+    </section>
+
+    <!-- ============ HISTORY VIEW ============ -->
+    <section id="view-history" class="view">
+      <h2>Saved Listings</h2>
+      <div id="history-status" class="hint"></div>
+      <div id="history-list" class="history-list"></div>
+      <div id="history-detail" class="result hidden"></div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

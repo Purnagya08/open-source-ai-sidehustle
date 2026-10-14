@@ -1,6 +1,6 @@
 # SideHustle — AI Product-Photo Listing Generator
 
-Generate ready-to-post product listings from photos using **Gemma 3** running locally via **Ollama**.
+Generate ready-to-post product listings from photos using **Gemma 3** running locally via **Ollama**. Includes a mobile-friendly web UI.
 
 ## Prerequisites
 
