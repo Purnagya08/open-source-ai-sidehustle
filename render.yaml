@@ -1,0 +1,29 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Connect this repo in Render → New → Blueprint
+
+services:
+  - type: web
+    name: sidehustle
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      # Set these in the Render dashboard (or replace with sync: false + dashboard)
+      - key: MONGODB_URI
+        sync: false
+      - key: OLLAMA_HOST
+        sync: false
+      - key: OLLAMA_MODEL
+        value: gemma3
+
+# Optional: managed MongoDB on Render (uncomment if you want Render Mongo)
+# databases:
+#   - name: sidehustle-db
+#     plan: free
