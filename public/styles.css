@@ -563,3 +563,54 @@ textarea {
   color: var(--muted);
   line-height: 1.45;
 }
+
+/* ---------- Access gate ---------- */
+.access-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(31, 41, 55, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.access-gate.hidden {
+  display: none !important;
+}
+
+.access-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.access-card h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.access-card .hint {
+  margin-bottom: 1rem;
+}
+
+.access-card input {
+  width: 100%;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.access-card .error-box {
+  margin-top: 0.75rem;
+}
+
+.access-card .primary-btn {
+  margin-top: 0.25rem;
+}

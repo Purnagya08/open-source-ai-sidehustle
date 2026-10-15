@@ -6,6 +6,126 @@ const JPEG_QUALITY = 0.8;
 let ollamaReady = false;
 let healthTimer = null;
 
+const ACCESS_STORAGE_KEY = "sidehustle_access_code";
+
+function getAccessCode() {
+  return localStorage.getItem(ACCESS_STORAGE_KEY) || "";
+}
+
+function setAccessCode(code) {
+  localStorage.setItem(ACCESS_STORAGE_KEY, code);
+}
+
+function clearAccessCode() {
+  localStorage.removeItem(ACCESS_STORAGE_KEY);
+}
+
+/** fetch wrapper: always send X-Access-Code on API calls */
+async function apiFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  const code = getAccessCode();
+  if (code) headers.set("X-Access-Code", code);
+
+  const res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401) {
+    clearAccessCode();
+    showAccessGate("Invalid or missing access code. Please enter it again.");
+  }
+  return res;
+}
+
+function showAccessGate(errMsg) {
+  const gate = document.getElementById("access-gate");
+  const shell = document.getElementById("app-shell");
+  const err = document.getElementById("access-error");
+  gate.classList.remove("hidden");
+  if (shell) shell.style.visibility = "hidden";
+  if (errMsg) {
+    err.textContent = errMsg;
+    err.classList.remove("hidden");
+  } else {
+    err.classList.add("hidden");
+  }
+}
+
+function hideAccessGate() {
+  document.getElementById("access-gate").classList.add("hidden");
+  const shell = document.getElementById("app-shell");
+  if (shell) shell.style.visibility = "";
+  document.getElementById("access-error").classList.add("hidden");
+}
+
+async function initAccessGate() {
+  // Ask server if a code is required
+  let required = true;
+  try {
+    const res = await fetch("/api/health");
+    const data = await res.json();
+    required = !!data.accessCodeRequired;
+  } catch {
+    required = true;
+  }
+
+  if (!required) {
+    hideAccessGate();
+    return;
+  }
+
+  if (getAccessCode()) {
+    // Probe with a protected route (history list)
+    try {
+      const probe = await apiFetch("/api/listings");
+      if (probe.status === 401) {
+        showAccessGate("Invalid or missing access code. Please enter it again.");
+        return;
+      }
+      // 503 DB is fine — code was accepted
+      hideAccessGate();
+      return;
+    } catch {
+      hideAccessGate();
+      return;
+    }
+  }
+
+  showAccessGate();
+}
+
+document.getElementById("access-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = document.getElementById("access-input");
+  const code = (input.value || "").trim();
+  const err = document.getElementById("access-error");
+  if (!code) {
+    err.textContent = "Please enter the access code.";
+    err.classList.remove("hidden");
+    return;
+  }
+
+  setAccessCode(code);
+
+  // Validate against API
+  try {
+    const probe = await apiFetch("/api/listings");
+    if (probe.status === 401) {
+      clearAccessCode();
+      err.textContent =
+        "That access code is not correct. Check with the host and try again.";
+      err.classList.remove("hidden");
+      return;
+    }
+    hideAccessGate();
+    input.value = "";
+    refreshHealth();
+  } catch {
+    // Network error — still unlock UI; generate will fail clearly
+    hideAccessGate();
+  }
+});
+
+initAccessGate();
+
 // ======================= TAB NAV =======================
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => switchView(btn.dataset.view));
@@ -50,8 +170,7 @@ async function refreshHealth() {
       } else {
         text.textContent = "Model missing";
         hint.textContent =
-          data.message ||
-          `Run: ollama pull ${data.model || "gemma3"}`;
+          data.message || `Run: ollama pull ${data.model || "gemma3"}`;
       }
       hint.classList.remove("hidden");
       chip.title = data.message || "Ollama not ready";
@@ -61,12 +180,10 @@ async function refreshHealth() {
     chip.classList.remove("checking", "ready");
     chip.classList.add("down");
     text.textContent = "Server off";
-    hint.textContent =
-      "Cannot reach the API. Is npm run dev still running?";
+    hint.textContent = "Cannot reach the API. Is npm run dev still running?";
     hint.classList.remove("hidden");
   }
 
-  // Don't enable while a generation is in progress (btn already disabled then)
   const loading = document.getElementById("loading");
   const busy = loading && !loading.classList.contains("hidden");
   btn.disabled = !ollamaReady || busy;
@@ -75,7 +192,6 @@ async function refreshHealth() {
 function startHealthPolling() {
   refreshHealth();
   if (healthTimer) clearInterval(healthTimer);
-  // Re-check every 15s so the dot turns green after user starts Ollama
   healthTimer = setInterval(refreshHealth, 15000);
 }
 
@@ -97,40 +213,31 @@ function compressImage(file) {
 
     img.onload = () => {
       URL.revokeObjectURL(url);
-
       let { width, height } = img;
       const longest = Math.max(width, height);
-
       if (longest > MAX_EDGE) {
         const scale = MAX_EDGE / longest;
         width = Math.round(width * scale);
         height = Math.round(height * scale);
       }
-
       const canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
-
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         reject(new Error("Could not process this image. Try another photo."));
         return;
       }
-
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
-
       canvas.toBlob(
         (blob) => {
           if (!blob) {
-            reject(
-              new Error("Could not compress this image. Try another photo.")
-            );
+            reject(new Error("Could not compress this image. Try another photo."));
             return;
           }
-          const base =
-            (file.name || "photo").replace(/\.[^.]+$/, "") || "photo";
+          const base = (file.name || "photo").replace(/\.[^.]+$/, "") || "photo";
           resolve(
             new File([blob], `${base}.jpg`, {
               type: "image/jpeg",
@@ -142,14 +249,10 @@ function compressImage(file) {
         JPEG_QUALITY
       );
     };
-
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(
-        new Error("This file is not a valid image. Please choose a photo.")
-      );
+      reject(new Error("This file is not a valid image. Please choose a photo."));
     };
-
     img.src = url;
   });
 }
@@ -161,28 +264,23 @@ document.getElementById("gallery-input").addEventListener("change", handleFiles)
 async function handleFiles(e) {
   const incoming = Array.from(e.target.files || []);
   e.target.value = "";
-
   if (!incoming.length) return;
-
   document.getElementById("error").classList.add("hidden");
 
   for (const file of incoming) {
     if (selectedFiles.length >= MAX_FILES) break;
-
     if (!file.type || !file.type.startsWith("image/")) {
       showError(
         "Only image files are allowed. Please choose a photo from camera or gallery."
       );
       continue;
     }
-
     try {
       selectedFiles.push(await compressImage(file));
     } catch (err) {
       showError(err.message || "Could not read that image. Try another photo.");
     }
   }
-
   renderPreviews();
 }
 
@@ -221,7 +319,6 @@ document.getElementById("generate-form").addEventListener("submit", async (e) =>
     refreshHealth();
     return;
   }
-
   if (selectedFiles.length === 0) {
     showError("Please add at least one photo.");
     return;
@@ -246,7 +343,7 @@ document.getElementById("generate-form").addEventListener("submit", async (e) =>
   if (platform) fd.append("platform", platform);
 
   try {
-    const res = await fetch("/api/listings/generate", {
+    const res = await apiFetch("/api/listings/generate", {
       method: "POST",
       body: fd,
     });
@@ -259,6 +356,17 @@ document.getElementById("generate-form").addEventListener("submit", async (e) =>
     }
 
     if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error(
+          data.error || "Invalid access code. Please enter the correct code."
+        );
+      }
+      if (res.status === 429) {
+        throw new Error(
+          data.error ||
+            "Generation limit reached (10 per hour). Please try again later."
+        );
+      }
       if (res.status === 503) {
         throw new Error(
           data.error ||
@@ -301,7 +409,6 @@ function renderResult(listing, container) {
   if (listing.title && listing.title.trim()) {
     container.appendChild(makeCard("Title", listing.title, listing.title));
   }
-
   if (listing.description && listing.description.trim()) {
     container.appendChild(
       makeCard("Description", listing.description, listing.description)
@@ -348,7 +455,6 @@ function renderResult(listing, container) {
     );
   }
 
-  // --- WhatsApp & Copy Action Row ---
   const actions = document.createElement("div");
   actions.className = "result-actions";
 
@@ -358,7 +464,6 @@ function renderResult(listing, container) {
   shareBtn.href = buildWhatsAppShareUrl(listing);
   shareBtn.target = "_blank";
   shareBtn.rel = "noopener noreferrer";
-  shareBtn.setAttribute("role", "button");
   actions.appendChild(shareBtn);
 
   const copyAll = document.createElement("button");
@@ -369,7 +474,6 @@ function renderResult(listing, container) {
     copyToClipboard(buildFullText(listing), copyAll, "✓ Copied Full Listing");
   });
   actions.appendChild(copyAll);
-
   container.appendChild(actions);
 }
 
@@ -392,23 +496,22 @@ function makeCard(label, bodyContent, copyText, isHtml = false) {
   return card;
 }
 
-// --- WhatsApp & Copy Text Builders ---
 function buildFullText(l) {
   const parts = [];
   if (l.title) parts.push(l.title, "");
   if (l.description) parts.push(l.description, "");
-  
   const bulletsRaw = (l.featureBullets || []).filter((b) => b.trim());
-  if (bulletsRaw.length) parts.push("FEATURES:", ...bulletsRaw.map((b) => `• ${b}`), "");
-  
+  if (bulletsRaw.length)
+    parts.push("FEATURES:", ...bulletsRaw.map((b) => `• ${b}`), "");
   if (l.priceRange) parts.push(`PRICE: ${l.priceRange}`, "");
-  
   const kwRaw = (l.keywords || []).filter((k) => k.trim());
   if (kwRaw.length) parts.push("KEYWORDS: " + kwRaw.join(", "), "");
-  
   const qRaw = (l.questionsForSeller || []).filter((q) => q.trim());
-  if (qRaw.length) parts.push("QUESTIONS FOR SELLER:", ...qRaw.map((q, i) => `${i + 1}. ${q}`));
-  
+  if (qRaw.length)
+    parts.push(
+      "QUESTIONS FOR SELLER:",
+      ...qRaw.map((q, i) => `${i + 1}. ${q}`)
+    );
   return parts.join("\n").trim();
 }
 
@@ -416,25 +519,18 @@ function buildWhatsAppShareText(l) {
   const parts = [];
   if (l.title) parts.push(`*${l.title}*`, "");
   if (l.description) parts.push(l.description, "");
-
   const bulletsRaw = (l.featureBullets || []).filter((b) => b.trim());
-  if (bulletsRaw.length > 0) {
-    parts.push(...bulletsRaw.map((b) => `• ${b}`), "");
-  }
-
-  if (l.priceRange) {
-    parts.push(`💰 ${l.priceRange}`);
-  }
-
+  if (bulletsRaw.length) parts.push(...bulletsRaw.map((b) => `• ${b}`), "");
+  if (l.priceRange) parts.push(`💰 ${l.priceRange}`);
   return parts.join("\n").trim();
 }
 
 function buildWhatsAppShareUrl(listing) {
-  const text = buildWhatsAppShareText(listing);
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/?text=${encodeURIComponent(
+    buildWhatsAppShareText(listing)
+  )}`;
 }
 
-// --- Clipboard Helper ---
 async function copyToClipboard(text, btn, successMsg) {
   try {
     await navigator.clipboard.writeText(text);
@@ -477,7 +573,11 @@ async function loadHistory() {
   statusEl.textContent = "Loading...";
 
   try {
-    const res = await fetch("/api/listings");
+    const res = await apiFetch("/api/listings");
+    if (res.status === 401) {
+      statusEl.textContent = "Access code required.";
+      return;
+    }
     if (!res.ok) {
       statusEl.textContent =
         res.status === 503
@@ -524,20 +624,18 @@ function showHistoryDetail(listing) {
   back.addEventListener("click", loadHistory);
   detailEl.appendChild(back);
 
-  // 1. Language Translation Bar
   const transBar = document.createElement("div");
   transBar.className = "translate-bar";
   transBar.innerHTML = `
     <select id="hist-lang">
-      <option value="English" ${listing.language === 'English' ? 'selected' : ''}>English</option>
-      <option value="Hindi" ${listing.language === 'Hindi' ? 'selected' : ''}>Hindi</option>
-      <option value="Bengali" ${listing.language === 'Bengali' ? 'selected' : ''}>Bengali (experimental)</option>
+      <option value="English" ${listing.language === "English" ? "selected" : ""}>English</option>
+      <option value="Hindi" ${listing.language === "Hindi" ? "selected" : ""}>Hindi</option>
+      <option value="Bengali" ${listing.language === "Bengali" ? "selected" : ""}>Bengali (experimental)</option>
     </select>
     <button id="hist-trans-btn" class="secondary-btn">Regenerate Language</button>
   `;
   detailEl.appendChild(transBar);
 
-  // 2. Editable Form
   const form = document.createElement("form");
   form.className = "edit-form";
   form.innerHTML = `
@@ -548,16 +646,16 @@ function showHistoryDetail(listing) {
       <textarea id="edit-desc" rows="4" required>${escapeHtml(listing.description)}</textarea>
     </div>
     <div class="field"><label>Feature Bullets (one per line)</label>
-      <textarea id="edit-bullets" rows="5">${escapeHtml((listing.featureBullets||[]).join('\n'))}</textarea>
+      <textarea id="edit-bullets" rows="5">${escapeHtml((listing.featureBullets || []).join("\n"))}</textarea>
     </div>
     <div class="field"><label>Keywords (comma separated)</label>
-      <textarea id="edit-keywords" rows="3">${escapeHtml((listing.keywords||[]).join(', '))}</textarea>
+      <textarea id="edit-keywords" rows="3">${escapeHtml((listing.keywords || []).join(", "))}</textarea>
     </div>
     <div class="field"><label>Price Range</label>
       <input type="text" id="edit-price" value="${escapeHtml(listing.priceRange)}" required>
     </div>
     <div class="field"><label>Questions For Seller (one per line)</label>
-      <textarea id="edit-questions" rows="3">${escapeHtml((listing.questionsForSeller||[]).join('\n'))}</textarea>
+      <textarea id="edit-questions" rows="3">${escapeHtml((listing.questionsForSeller || []).join("\n"))}</textarea>
     </div>
     <input type="hidden" id="edit-language" value="${escapeHtml(listing.language)}">
     <button type="submit" id="hist-save-btn" class="primary-btn">Save Changes</button>
@@ -565,7 +663,6 @@ function showHistoryDetail(listing) {
   `;
   detailEl.appendChild(form);
 
-  // 3. Action Row (WhatsApp + Copy)
   const actions = document.createElement("div");
   actions.className = "result-actions history-actions";
   actions.innerHTML = `
@@ -575,47 +672,63 @@ function showHistoryDetail(listing) {
   detailEl.appendChild(actions);
   detailEl.classList.remove("hidden");
 
-  // Helper to get current form data
   const getFormListing = () => ({
     title: document.getElementById("edit-title").value,
     description: document.getElementById("edit-desc").value,
-    featureBullets: document.getElementById("edit-bullets").value.split('\n').map(x=>x.trim()).filter(Boolean),
-    keywords: document.getElementById("edit-keywords").value.split(',').map(x=>x.trim()).filter(Boolean),
+    featureBullets: document
+      .getElementById("edit-bullets")
+      .value.split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean),
+    keywords: document
+      .getElementById("edit-keywords")
+      .value.split(",")
+      .map((x) => x.trim())
+      .filter(Boolean),
     priceRange: document.getElementById("edit-price").value,
-    questionsForSeller: document.getElementById("edit-questions").value.split('\n').map(x=>x.trim()).filter(Boolean),
-    language: document.getElementById("edit-language").value
+    questionsForSeller: document
+      .getElementById("edit-questions")
+      .value.split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean),
+    language: document.getElementById("edit-language").value,
   });
 
   const msg = document.getElementById("hist-msg");
 
-  // Translate handler
-  const tBtn = document.getElementById("hist-trans-btn");
-  tBtn.addEventListener("click", async (e) => {
+  document.getElementById("hist-trans-btn").addEventListener("click", async (e) => {
     e.preventDefault();
+    const tBtn = e.currentTarget;
     tBtn.disabled = true;
     tBtn.textContent = "Translating...";
     msg.textContent = "";
     try {
       const lang = document.getElementById("hist-lang").value;
-      const res = await fetch(`/api/listings/${listing._id}/translate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: lang })
+      const res = await apiFetch(`/api/listings/${listing._id}/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language: lang }),
       });
       const data = await res.json();
-      if(!res.ok) throw new Error(data.error || "Translation failed");
+      if (!res.ok) throw new Error(data.error || "Translation failed");
 
       document.getElementById("edit-title").value = data.listing.title;
       document.getElementById("edit-desc").value = data.listing.description;
-      document.getElementById("edit-bullets").value = (data.listing.featureBullets||[]).join('\n');
-      document.getElementById("edit-keywords").value = (data.listing.keywords||[]).join(', ');
+      document.getElementById("edit-bullets").value = (
+        data.listing.featureBullets || []
+      ).join("\n");
+      document.getElementById("edit-keywords").value = (
+        data.listing.keywords || []
+      ).join(", ");
       document.getElementById("edit-price").value = data.listing.priceRange;
-      document.getElementById("edit-questions").value = (data.listing.questionsForSeller||[]).join('\n');
+      document.getElementById("edit-questions").value = (
+        data.listing.questionsForSeller || []
+      ).join("\n");
       document.getElementById("edit-language").value = data.language;
 
       msg.textContent = "✓ Translation done. Click 'Save Changes' to update.";
       msg.style.color = "var(--success)";
-    } catch(err) {
+    } catch (err) {
       msg.textContent = "Error: " + err.message;
       msg.style.color = "var(--error-text)";
     } finally {
@@ -624,22 +737,24 @@ function showHistoryDetail(listing) {
     }
   });
 
-  // Save handler
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const sBtn = document.getElementById("hist-save-btn");
     sBtn.disabled = true;
     sBtn.textContent = "Saving...";
     try {
-      const res = await fetch(`/api/listings/${listing._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(getFormListing())
+      const res = await apiFetch(`/api/listings/${listing._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(getFormListing()),
       });
-      if(!res.ok) throw new Error("Failed to save to database");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to save to database");
+      }
       msg.textContent = "✓ Saved successfully.";
       msg.style.color = "var(--success)";
-    } catch(err) {
+    } catch (err) {
       msg.textContent = "Error: " + err.message;
       msg.style.color = "var(--error-text)";
     } finally {
@@ -648,12 +763,19 @@ function showHistoryDetail(listing) {
     }
   });
 
-  // Action buttons
   document.getElementById("hist-wa-btn").addEventListener("click", () => {
-    window.open(buildWhatsAppShareUrl(getFormListing()), "_blank", "noopener,noreferrer");
+    window.open(
+      buildWhatsAppShareUrl(getFormListing()),
+      "_blank",
+      "noopener,noreferrer"
+    );
   });
 
   document.getElementById("hist-copy-btn").addEventListener("click", (e) => {
-    copyToClipboard(buildFullText(getFormListing()), e.currentTarget, "✓ Copied Full Listing");
+    copyToClipboard(
+      buildFullText(getFormListing()),
+      e.currentTarget,
+      "✓ Copied Full Listing"
+    );
   });
 }

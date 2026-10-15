@@ -5,9 +5,13 @@ const path = require("path");
 const mongoose = require("mongoose");
 const listingsRouter = require("./routes/listings");
 const { checkOllamaHealth } = require("./services/ollama");
+const { ACCESS_CODE_CONFIGURED } = require("./middleware/access");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Trust proxy so rate-limit IP works behind Render
+app.set("trust proxy", 1);
 
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
@@ -16,14 +20,9 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/api/listings", listingsRouter);
 
-/**
- * GET /api/health
- * Reports API up, Mongo status, Ollama reachability, and whether the model is installed.
- */
 app.get("/api/health", async (_req, res) => {
   const ollama = await checkOllamaHealth();
   const mongoReady = mongoose.connection.readyState === 1;
-
   const ready = ollama.ollamaReachable && ollama.modelInstalled;
 
   res.status(ready ? 200 : 503).json({
@@ -34,6 +33,7 @@ app.get("/api/health", async (_req, res) => {
     modelInstalled: ollama.modelInstalled,
     model: ollama.model,
     message: ollama.message,
+    accessCodeRequired: ACCESS_CODE_CONFIGURED,
   });
 });
 
@@ -59,4 +59,9 @@ mongoose.connection.on("disconnected", () =>
 
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
+  if (ACCESS_CODE_CONFIGURED) {
+    console.log("🔒 ACCESS_CODE is set — API routes require X-Access-Code");
+  } else {
+    console.warn("⚠ ACCESS_CODE not set — API is open");
+  }
 });

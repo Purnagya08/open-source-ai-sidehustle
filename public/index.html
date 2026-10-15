@@ -8,6 +8,26 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <!-- Access code gate -->
+  <div id="access-gate" class="access-gate hidden">
+    <div class="access-card">
+      <h2>Enter access code</h2>
+      <p class="hint">This demo is limited. Ask the host for the code.</p>
+      <form id="access-form">
+        <input
+          type="password"
+          id="access-input"
+          placeholder="Access code"
+          autocomplete="current-password"
+          required
+        />
+        <button type="submit" class="primary-btn">Continue</button>
+      </form>
+      <p id="access-error" class="error-box hidden"></p>
+    </div>
+  </div>
+
+  <div id="app-shell">
   <header class="app-header">
     <div class="header-top">
       <h1>SideHustle</h1>
@@ -86,7 +106,6 @@
       </div>
 
       <div id="error" class="error-box hidden"></div>
-
       <div id="result" class="result hidden"></div>
     </section>
 
@@ -96,11 +115,12 @@
       <div id="history-list" class="history-list"></div>
       <div id="history-detail" class="result hidden"></div>
     </section>
-    </main>
+  </main>
 
   <footer class="app-footer">
     <p>Generation runs on the seller's own machine; this page is only the interface.</p>
   </footer>
+  </div><!-- #app-shell -->
 
   <script src="/app.js"></script>
 </body>

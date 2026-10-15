@@ -26,6 +26,7 @@ const LISTING_SCHEMA = {
 const SCRIPT_RANGES = { Hindi: "\u0900-\u097F", Bengali: "\u0980-\u09FF" };
 const COMMON_ALLOWED = "0-9\u20B9\\p{P}\\p{Z}a-zA-Z";
 const ENGLISH_ALLOWLIST = new Set(["home", "decor", "gift", "set", "size", "design", "style", "look", "free", "cm", "mm", "inch", "g", "kg", "led", "v", "w"]);
+
 const GLOSSARY = {
   Hindi: `jhumka = झुमका, chain = चेन, stone = पत्थर या नग, pearl-like beads = मोती जैसे दाने, set with = जड़ा हुआ, gold-tone = सुनहरे रंग का, silver-tone = चांदी के रंग का, lighthouse = लाइटहाउस, bulb = बल्ब`,
   Bengali: `jhumka = ঝুমকা, chain = চেইন, stone = পাথর, pearl-like beads = মুক্তার মতো পুঁতি, set with = খচিত, gold-tone = সোনালী রঙের, silver-tone = রূপালী রঙের, lighthouse = লাইটহাউস, bulb = বাল্ব`,
@@ -36,14 +37,17 @@ function buildVisionPrompt(category, platform, currency) {
   return [
     `You are a professional e-commerce product-listing writer.`,
     `STRICT PROMPT RULES:`,
-    `1. NOT-A-PRODUCT GUARD: First, verify the photo shows a sellable physical product. A product being worn or held IS valid. Reject only if it is solely a receipt, document, screenshot, or face with no sellable item. If invalid, set "isProduct" to false and provide a "reason". If valid, set to true.`,
-    `2. VISUAL FIDELITY & COVERAGE: Only describe features clearly visible. Mention every main colour, stone, shape, and approximate length. NEVER guess age, brand, or "handmade". NEVER name specific precious metals or gems unless explicitly written in the photo. Use neutral words like "gold-tone", "metal", "stone".`,
-    `3. FEATURE BULLETS: Must be real, visible selling points. No filler phrases.`,
-    `4. TITLE FORMAT: Concise, strictly under 10 words.`,
-    `5. KEYWORDS: Search terms real buyers use. Must fit the "${category}" category.`,
-    `6. PRICE RANGE: Clear numeric range with two DIFFERENT numbers using "${currency}".`,
-    `7. QUESTIONS FOR SELLER: Ask about critical unseen details (exact metal, plating, dimensions). Never ask care questions.`,
-    `8. CATEGORY: "${category}". ${platformLine}`,
+    `1. NOT-A-PRODUCT GUARD: Verify the photo shows a sellable physical product (worn/held items are valid). Reject if solely a receipt, document, screenshot, or face. If invalid, set "isProduct" to false and provide a "reason". If valid, set to true.`,
+    `2. VISUAL FIDELITY & PARTS: Describe ONLY what is clearly visible. NEVER mention unseen attachments, clasps, ear hooks, or backs unless explicitly visible in the photo.`,
+    `3. MATERIALS & PRICING: NEVER state a metal or gem as fact (e.g., gold, silver, platinum, diamond, pearl) unless text in the photo explicitly says so. ALWAYS use "gold-tone", "silver-tone", "pearl-like beads", and "stone" in the title, description, bullets, and keywords. Base the "priceRange" on a fashion-jewellery (imitation) assumption unless text proves otherwise.`,
+    `4. MEASUREMENTS: NEVER state exact sizes, lengths, or weights (no cm, mm, inch, grams). Use relative terms only (e.g., short, long, large, small, layered). ALWAYS ask the seller for exact dimensions in "questionsForSeller".`,
+    `5. DESCRIPTION FORMAT: Write the "description" as a short, flowing paragraph. DO NOT put bullets or lists in the description.`,
+    `6. FEATURE BULLETS: Must be real, visible selling points. No filler phrases.`,
+    `7. TITLE FORMAT: Concise, strictly under 10 words.`,
+    `8. KEYWORDS: Search terms real buyers use. Must fit the "${category}" category.`,
+    `9. PRICE RANGE: Clear numeric range with two DIFFERENT numbers using "${currency}".`,
+    `10. QUESTIONS FOR SELLER: Ask about critical unseen details (exact metal, plating, dimensions, weight). Never ask care questions.`,
+    `11. CATEGORY: "${category}". ${platformLine}`,
     `Generate in English. Return valid JSON.`
   ].join("\n");
 }
@@ -53,7 +57,7 @@ function buildTranslationPrompt(targetLanguage, currency) {
     `You are a professional native translator. Translate this English e-commerce JSON into ${targetLanguage}.`,
     `STRICT RULES:`,
     `1. SCRIPT: Write ONLY in the ${targetLanguage} script. DO NOT mix scripts inside words.`,
-    `2. FAITHFUL: Natural shopkeeper-style ${targetLanguage}. Keep English words whole if translation is rare.`,
+    `2. FAITHFUL & MATERIALS: Natural shopkeeper-style ${targetLanguage}. Do not convert "gold-tone" into real gold, use the glossary terms. Keep English words whole if translation is rare.`,
     `3. GLOSSARY: Use these standard terms: ${GLOSSARY[targetLanguage] || ""}.`,
     `4. KEYWORDS: Keep common English terms ONLY if commonly searched.`,
     `5. PRICE RANGE: Keep the "${currency}" symbol exactly. Translate "Estimated".`,
