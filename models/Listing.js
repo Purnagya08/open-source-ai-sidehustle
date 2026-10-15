@@ -11,6 +11,8 @@ const listingSchema = new mongoose.Schema(
     language: { type: String, required: true },
     category: { type: String, required: true },
     platform: { type: String, default: null },
+    // Caches the raw English output so we can re-translate without vision
+    englishVersion: { type: mongoose.Schema.Types.Mixed }, 
   },
   { timestamps: true }
 );
