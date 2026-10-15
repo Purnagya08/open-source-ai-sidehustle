@@ -13,6 +13,7 @@ COPY models ./models
 COPY routes ./routes
 COPY services ./services
 COPY public ./public
+COPY middleware ./middleware
 
 # Optional: if you keep README/.env.example in image for docs
 # COPY README.md .env.example ./
