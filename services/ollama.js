@@ -32,21 +32,49 @@ const GLOSSARY = {
   Bengali: `jhumka = ঝুমকা, chain = চেইন, stone = পাথর, pearl-like beads = মুক্তার মতো পুঁতি, set with = খচিত, gold-tone = সোনালী রঙের, silver-tone = রূপালী রঙের, lighthouse = লাইটহাউস, bulb = বাল্ব`,
 };
 
+const CATEGORY_PRICE_BOUNDS = {
+  clothing: [249, 1999],
+  jewellery: [149, 1499],
+  "home decor": [199, 1999],
+  bags: [299, 2499],
+  food: [49, 799],
+  other: [99, 1999]
+};
+
 function buildVisionPrompt(category, platform, currency) {
   const platformLine = platform ? `Optimise tone for "${platform}".` : "Write a general-purpose e-commerce listing.";
+  const catLower = (category || "").toLowerCase();
+
+  let categorySpecificRules = "";
+  if (catLower === "clothing") {
+    categorySpecificRules = [
+      `4. CLOTHING VISUALS: NEVER guess or claim non-visible fabric properties (like warmth, softness, breathability, stretch, or quality). Describe ONLY visible traits: colour, pattern, cut, sleeve, collar, and closure. NEVER state exact measurements.`,
+      `10. QUESTIONS FOR SELLER: For clothing, ONLY ask for: exact size/measurements, exact fabric composition, fit, and available colours. DO NOT ask for weight. Never ask care questions.`
+    ].join("\n");
+  } else if (catLower === "jewellery") {
+    categorySpecificRules = [
+      `4. MEASUREMENTS: NEVER state exact sizes, lengths, or weights. Use relative terms only (e.g., short, long, layered).`,
+      `10. QUESTIONS FOR SELLER: Ask for exact dimensions, weight, exact metal, stones, and whether it is plated. Never ask care questions.`
+    ].join("\n");
+  } else {
+    categorySpecificRules = [
+      `4. MEASUREMENTS: NEVER state exact sizes, lengths, or weights. Use relative terms only.`,
+      `10. QUESTIONS FOR SELLER: Ask about critical unseen details (exact dimensions, weight, exact material). Never ask care questions.`
+    ].join("\n");
+  }
+
   return [
     `You are a professional e-commerce product-listing writer.`,
     `STRICT PROMPT RULES:`,
     `1. NOT-A-PRODUCT GUARD: Verify the photo shows a sellable physical product (worn/held items are valid). Reject if solely a receipt, document, screenshot, or face. If invalid, set "isProduct" to false and provide a "reason". If valid, set to true.`,
     `2. VISUAL FIDELITY & PARTS: Describe ONLY what is clearly visible. NEVER mention unseen attachments, clasps, ear hooks, or backs unless explicitly visible in the photo.`,
-    `3. MATERIALS & PRICING: NEVER state a metal or gem as fact (e.g., gold, silver, platinum, diamond, pearl) unless text in the photo explicitly says so. ALWAYS use "gold-tone", "silver-tone", "pearl-like beads", and "stone" in the title, description, bullets, and keywords. Base the "priceRange" on a fashion-jewellery (imitation) assumption unless text proves otherwise.`,
-    `4. MEASUREMENTS: NEVER state exact sizes, lengths, or weights (no cm, mm, inch, grams). Use relative terms only (e.g., short, long, large, small, layered). ALWAYS ask the seller for exact dimensions in "questionsForSeller".`,
+    `3. MATERIALS: NEVER state a metal or gem as fact (e.g., gold, silver, platinum, diamond, pearl) unless text in the photo explicitly says so. ALWAYS use "gold-tone", "silver-tone", "pearl-like beads", and "stone" in the title, description, bullets, and keywords.`,
+    categorySpecificRules,
     `5. DESCRIPTION FORMAT: Write the "description" as a short, flowing paragraph. DO NOT put bullets or lists in the description.`,
     `6. FEATURE BULLETS: Must be real, visible selling points. No filler phrases.`,
     `7. TITLE FORMAT: Concise, strictly under 10 words.`,
     `8. KEYWORDS: Search terms real buyers use. Must fit the "${category}" category.`,
     `9. PRICE RANGE: Clear numeric range with two DIFFERENT numbers using "${currency}".`,
-    `10. QUESTIONS FOR SELLER: Ask about critical unseen details (exact metal, plating, dimensions, weight). Never ask care questions.`,
     `11. CATEGORY: "${category}". ${platformLine}`,
     `Generate in English. Return valid JSON.`
   ].join("\n");
@@ -90,7 +118,7 @@ function validateTranslationScript(json, language) {
 
   for (const text of texts) {
     if (allowed && !allowed.test(text)) return false;
-    if (/\([^)]*[a-zA-Z][^)]*\)/.test(text)) return false; // English in parens
+    if (/\([^)]*[a-zA-Z][^)]*\)/.test(text)) return false; 
     
     const words = text.split(/[\s,.;:!?\"'”’“‘(){}\[\]]+/);
     for (const word of words) {
@@ -140,20 +168,46 @@ function cleanArrays(json) {
   return json;
 }
 
-function fixPriceRange(priceStr, currency) {
-  const defaultRange = `${currency}499 - ${currency}799 (Estimated)`;
+function fixPriceRange(priceStr, currency, category) {
+  const catKey = (category || "").toLowerCase();
+  const [minPrice, maxPrice] = CATEGORY_PRICE_BOUNDS[catKey] || CATEGORY_PRICE_BOUNDS.other;
+  
+  // Sensible default inside the category range
+  const defaultLow = Math.min(minPrice + 100, Math.floor(maxPrice * 0.5));
+  const defaultHigh = Math.min(defaultLow + 300, maxPrice);
+  const defaultRange = `${currency}${defaultLow} - ${currency}${defaultHigh} (Estimated)`;
+
   if (!priceStr) return defaultRange;
+
   const matches = priceStr.replace(/,/g, "").match(/\d+(\.\d+)?/g);
-  if (!matches) return defaultRange;
-  let low = parseFloat(matches[0]);
-  let high = matches.length > 1 ? parseFloat(matches[1]) : low;
-  if (low === high) {
-    low = Math.floor(low * 0.8);
-    high = Math.ceil(high * 1.2);
-    if (low === high) { low -= 1; high += 1; }
-  } else if (low > high) {
+  if (!matches || matches.length === 0) return defaultRange;
+
+  let low = Math.round(parseFloat(matches[0]));
+  let high = matches.length > 1 ? Math.round(parseFloat(matches[1])) : low;
+
+  if (low > high) {
     const temp = low; low = high; high = temp;
   }
+
+  // 1. Clamp to category boundaries
+  if (low < minPrice) low = minPrice;
+  if (low >= maxPrice) low = maxPrice - 50; 
+  if (high > maxPrice) high = maxPrice;
+  
+  // 2. Ensure high is safely above low
+  if (high <= low) {
+    high = Math.ceil(low * 1.2);
+    if (high > maxPrice) {
+      high = maxPrice;
+      low = Math.max(minPrice, Math.floor(high * 0.8));
+    }
+    // Final check if they are somehow still equal
+    if (low === high) {
+      low = Math.max(minPrice, low - 50);
+      high = Math.min(maxPrice, high + 50);
+    }
+  }
+
   return `${currency}${low} - ${currency}${high} (Estimated)`;
 }
 
@@ -243,7 +297,9 @@ async function generateListing(imageBuffers, language, category, platform, curre
     if (englishListing.isProduct === false) return { listing: englishListing, englishListing: null };
     if (englishListing.featureBullets.length >= 3) break;
   }
-  englishListing.priceRange = fixPriceRange(englishListing.priceRange, currency);
+  
+  // Pass the category to fixPriceRange so bounds are correctly applied
+  englishListing.priceRange = fixPriceRange(englishListing.priceRange, currency, category);
 
   const finalListing = await translateListing(englishListing, language, currency);
   return { listing: finalListing, englishListing };
